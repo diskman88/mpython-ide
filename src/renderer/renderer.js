@@ -25,8 +25,9 @@ document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
     setupElectronCallbacks();
     loadSettings();
-    initTerminal();
+    // 先初始化编辑器，再初始化终端
     initEditor();
+    initTerminal();
     // 初始刷新串口列表
     refreshPorts();
     // 每3秒自动刷新一次串口列表
@@ -56,6 +57,12 @@ document.addEventListener('DOMContentLoaded', () => {
     require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' } });
 
     require(['vs/editor/editor.main'], function () {
+      // 确保编辑器容器存在
+      if (!editorContainer) {
+        console.error('Editor container not found');
+        return;
+      }
+      
       // 创建 Monaco Editor
       codeEditor = monaco.editor.create(editorContainer, {
         value: `import time
@@ -82,6 +89,8 @@ while True:
         formatOnPaste: true,
         formatOnType: true
       });
+      
+      console.log('Monaco Editor initialized successfully');
     });
   }
 
@@ -149,6 +158,13 @@ while True:
     term.textarea.addEventListener('keydown', (e) => {
       if (e.ctrlKey && e.key === 'c') {
         e.preventDefault(); // 阻止浏览器默认行为
+      }
+    });
+
+    // 处理终端粘贴事件
+    term.onPaste((text) => {
+      if (isConnected) {
+        window.electronAPI.sendRaw(text);
       }
     });
   }
