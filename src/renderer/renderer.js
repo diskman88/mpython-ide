@@ -137,10 +137,18 @@ while True:
     term.focus();
 
     // 处理键盘输入 - 参考 micropython-ctl 的方式
-    // xterm 会处理所有按键，包括 Tab、方向键等
+    // xterm 会处理所有按键，包括 Tab、方向键、Ctrl+C等
     term.onData((data) => {
       if (isConnected) {
+        // 直接发送所有数据，包括控制字符
         window.electronAPI.sendRaw(data);
+      }
+    });
+
+    // 监听键盘事件，确保Ctrl+C不被浏览器拦截
+    term.textarea.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === 'c') {
+        e.preventDefault(); // 阻止浏览器默认行为
       }
     });
   }
@@ -245,6 +253,7 @@ while True:
 
   function setupElectronCallbacks() {
     window.electronAPI.onPortsList((ports) => {
+      const currentValue = portSelect.value; // 保存当前选中的值
       portSelect.innerHTML = '<option value="">-- 选择串口 --</option>';
       ports.forEach(port => {
         const option = document.createElement('option');
@@ -252,6 +261,10 @@ while True:
         option.textContent = `${port.path} - ${port.description || '未知设备'}`;
         portSelect.appendChild(option);
       });
+      // 恢复之前选中的值（如果该串口仍然存在）
+      if (currentValue && ports.some(p => p.path === currentValue)) {
+        portSelect.value = currentValue;
+      }
     });
 
     window.electronAPI.onPortError((err) => {
