@@ -1,0 +1,221 @@
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const path = require('path');
+const { SerialPort } = require('serialport');
+
+// 存储窗口引用
+let mainWindow;
+let serialPort = null;
+let cmdCallback = null;  // 当前命令的回调
+let dataBuffer = '';     // 数据缓冲区
+
+// 创建主窗口
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 1000,
+    minHeight: 700,
+    title: 'MPython IDE',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webviewTag: true
+    }
+  });
+
+  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  createMenu();
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    if (serialPort && serialPort.isOpen) {
+      serialPort.close();
+    }
+  });
+}
+
+// 创建菜单
+function createMenu() {
+  const template = [
+    {
+      label: '文件',
+      submenu: [
+        {
+          label: '打开文件',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => mainWindow.webContents.send('menu-action', 'open-file')
+        },
+        {
+          label: '保存',
+          accelerator: 'CmdOrCtrl+S',
+          click: () => mainWindow.webContents.send('menu-action', 'save-file')
+        },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    },
+    {
+      label: '视图',
+      submenu: [
+        { role: 'reload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: '连接',
+      submenu: [
+        {
+          label: '刷新串口',
+          click: () => mainWindow.webContents.send('refresh-ports')
+        },
+        {
+          label: '断开连接',
+          click: () => disconnectSerial()
+        }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
+// 获取串口列表
+function getSerialPorts() {
+  SerialPort.list().then(ports => {
+    mainWindow.webContents.send('serial-ports', ports);
+  }).catch(err => {
+    mainWindow.webContents.send('serial-error', err.message);
+  });
+}
+
+// 连接串口 - 参考 micropython-ctl 的实现
+function connectSerial(portPath, baudRate = 115200) {
+  if (serialPort && serialPort.isOpen) {
+    serialPort.close();
+  }
+
+  serialPort = new SerialPort({
+    path: portPath,
+    baudRate: baudRate,
+    autoOpen: false
+  });
+
+  serialPort.open((err) => {
+    if (err) {
+      mainWindow.webContents.send('serial-error', err.message);
+      return;
+    }
+
+    mainWindow.webContents.send('serial-connected', portPath);
+
+    // 参考 micropython-ctl:
+    // 1. 发送 Ctrl+C 两次中断任何正在运行的程序
+    // 2. 发送 Ctrl+B 退出 raw REPL 进入 friendly REPL
+    // 3. 等待 >>> 提示符
+    setTimeout(() => {
+      serialPort.write('\r\x03\x03', (err) => {
+        if (err) return;
+        // 等待一下再发送 Ctrl+B
+        setTimeout(() => {
+          serialPort.write('\x02', (err) => {  // Ctrl+B - 切换到 friendly REPL
+            if (err) return;
+            // 等待 >>> 提示符出现
+            waitForPrompt();
+          });
+        }, 100);
+      });
+    }, 500);
+  });
+
+  // 数据接收 - 参考 micropython-ctl 的 streaming 方式
+  serialPort.on('data', (data) => {
+    const text = data.toString();
+    // 直接发送到渲染进程（流式）
+    mainWindow.webContents.send('serial-data', text);
+
+    // 检查是否是命令完成（出现 >>>）
+    if (cmdCallback) {
+      dataBuffer += text;
+      if (dataBuffer.includes('>>>')) {
+        cmdCallback(null, dataBuffer);
+        cmdCallback = null;
+        dataBuffer = '';
+      }
+    }
+  });
+
+  serialPort.on('close', () => {
+    mainWindow.webContents.send('serial-closed');
+    cmdCallback = null;
+    dataBuffer = '';
+  });
+
+  serialPort.on('error', (err) => {
+    mainWindow.webContents.send('serial-error', err.message);
+  });
+}
+
+// 等待 >>> 提示符
+function waitForPrompt() {
+  // 这个函数在连接初始化时使用，现在通过 on('data') 已经自动处理了
+}
+
+// 断开串口
+function disconnectSerial() {
+  if (serialPort && serialPort.isOpen) {
+    serialPort.close();
+    serialPort = null;
+  }
+}
+
+// 发送原始数据（不回显，用于特殊按键如 Tab、方向键等）
+function sendRawToSerial(data) {
+  if (serialPort && serialPort.isOpen) {
+    serialPort.write(data, (err) => {
+      if (err) {
+        mainWindow.webContents.send('serial-error', err.message);
+      }
+    });
+  }
+}
+
+// IPC 事件处理
+ipcMain.on('get-ports', getSerialPorts);
+
+ipcMain.on('connect-serial', (event, port, baudRate) => {
+  connectSerial(port, baudRate);
+});
+
+ipcMain.on('disconnect-serial', () => {
+  disconnectSerial();
+});
+
+// 发送原始数据
+ipcMain.on('send-raw-serial', (event, data) => {
+  sendRawToSerial(data);
+});
+
+// 应用准备就绪
+app.whenReady().then(() => {
+  createWindow();
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});

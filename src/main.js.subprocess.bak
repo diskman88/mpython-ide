@@ -1,0 +1,320 @@
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const path = require('path');
+const { SerialPort } = require('serialport');
+
+// 存储窗口引用
+let mainWindow;
+let serialPort = null;
+let cmdCallback = null;
+let dataBuffer = '';
+let currentPort = null;
+let currentBaudRate = 115200;
+let isConnected = false;
+
+// 创建主窗口
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 1000,
+    minHeight: 700,
+    title: 'MPython IDE',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webviewTag: true
+    }
+  });
+
+  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  createMenu();
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    if (serialPort && serialPort.isOpen) {
+      serialPort.close();
+    }
+  });
+}
+
+// 创建菜单
+function createMenu() {
+  const template = [
+    {
+      label: '文件',
+      submenu: [
+        {
+          label: '打开文件',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => mainWindow.webContents.send('menu-action', 'open-file')
+        },
+        {
+          label: '保存',
+          accelerator: 'CmdOrCtrl+S',
+          click: () => mainWindow.webContents.send('menu-action', 'save-file')
+        },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    },
+    {
+      label: '视图',
+      submenu: [
+        { role: 'reload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: '连接',
+      submenu: [
+        {
+          label: '刷新串口',
+          click: () => mainWindow.webContents.send('refresh-ports')
+        },
+        {
+          label: '断开连接',
+          click: () => disconnectSerial()
+        }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
+// 获取串口列表
+function getSerialPorts() {
+  SerialPort.list().then(ports => {
+    mainWindow.webContents.send('serial-ports', ports);
+  }).catch(err => {
+    mainWindow.webContents.send('serial-error', err.message);
+  });
+}
+
+// 连接串口
+function connectSerial(portPath, baudRate = 115200) {
+  if (serialPort && serialPort.isOpen) {
+    serialPort.close();
+  }
+
+  currentPort = portPath;
+  currentBaudRate = baudRate;
+
+  serialPort = new SerialPort({
+    path: portPath,
+    baudRate: baudRate,
+    autoOpen: false
+  });
+
+  serialPort.open((err) => {
+    if (err) {
+      mainWindow.webContents.send('serial-error', err.message);
+      return;
+    }
+
+    isConnected = true;
+    mainWindow.webContents.send('serial-connected', portPath);
+    mainWindow.webContents.send('oc-status', { connected: true, port: portPath, baud: baudRate });
+
+    // 初始化 REPL
+    setTimeout(() => {
+      serialPort.write('\r\x03\x03', (err) => {
+        if (err) return;
+        setTimeout(() => {
+          serialPort.write('\x02', (err) => {  // Ctrl+B
+            if (err) return;
+          });
+        }, 100);
+      });
+    }, 500);
+  });
+
+  serialPort.on('data', (data) => {
+    const text = data.toString();
+    mainWindow.webContents.send('serial-data', text);
+    mainWindow.webContents.send('oc-data', text);
+
+    if (cmdCallback) {
+      dataBuffer += text;
+      if (dataBuffer.includes('>>>')) {
+        cmdCallback(null, dataBuffer);
+        cmdCallback = null;
+        dataBuffer = '';
+      }
+    }
+  });
+
+  serialPort.on('close', () => {
+    isConnected = false;
+    currentPort = null;
+    mainWindow.webContents.send('serial-closed');
+    mainWindow.webContents.send('oc-status', { connected: false, port: null, baud: null });
+    cmdCallback = null;
+    dataBuffer = '';
+  });
+
+  serialPort.on('error', (err) => {
+    mainWindow.webContents.send('serial-error', err.message);
+  });
+}
+
+// 断开串口
+function disconnectSerial() {
+  if (serialPort && serialPort.isOpen) {
+    serialPort.close();
+    serialPort = null;
+  }
+}
+
+// 发送原始数据
+function sendRawToSerial(data) {
+  if (serialPort && serialPort.isOpen) {
+    serialPort.write(data, (err) => {
+      if (err) {
+        mainWindow.webContents.send('serial-error', err.message);
+      }
+    });
+  }
+}
+
+// ============================================
+// IPC 事件处理 (原有功能)
+// ============================================
+ipcMain.on('get-ports', getSerialPorts);
+ipcMain.on('connect-serial', (event, port, baudRate) => connectSerial(port, baudRate));
+ipcMain.on('disconnect-serial', () => disconnectSerial());
+ipcMain.on('send-raw-serial', (event, data) => sendRawToSerial(data));
+
+// ============================================
+// OpenClaw IPC 处理器 (AI 控制接口)
+// ============================================
+
+// 简单操作：直接转发到 renderer
+ipcMain.on('oc-set-code', (event, code) => {
+  mainWindow.webContents.send('oc-set-code', code);
+});
+
+ipcMain.on('oc-connect', (event, port, baudRate) => {
+  connectSerial(port, baudRate);
+});
+
+ipcMain.on('oc-disconnect', () => {
+  disconnectSerial();
+});
+
+ipcMain.on('oc-send-raw', (event, data) => {
+  sendRawToSerial(data);
+});
+
+ipcMain.on('oc-run-code', () => {
+  mainWindow.webContents.send('oc-run-code');
+});
+
+// 带响应的操作：通过回调机制获取 renderer 中的数据
+ipcMain.on('oc-get-code', (event, id) => {
+  const responseChannel = 'oc-code-response';
+
+  // 监听一次响应
+  ipcMain.once(responseChannel, (event2, code) => {
+    mainWindow.webContents.send('oc-response', { id, result: code });
+  });
+
+  // 请求 renderer 获取代码
+  mainWindow.webContents.send('oc-get-code', responseChannel);
+
+  // 超时处理
+  setTimeout(() => {
+    mainWindow.webContents.send('oc-response', { id, result: null });
+  }, 2000);
+});
+
+ipcMain.on('oc-get-status', (event, id) => {
+  const status = {
+    connected: isConnected,
+    port: currentPort,
+    baud: currentBaudRate
+  };
+  mainWindow.webContents.send('oc-response', { id, result: status });
+});
+
+ipcMain.on('oc-get-ports', (event, id) => {
+  SerialPort.list().then(ports => {
+    mainWindow.webContents.send('oc-response', { id, result: ports });
+  }).catch(err => {
+    mainWindow.webContents.send('oc-response', { id, result: [] });
+  });
+});
+
+// ============================================
+// IDE Command API - OpenClaw AI 调用入口
+// 统一处理来自 webview 内 OpenClaw 的命令
+// ============================================
+ipcMain.on('ide-command', (event, { cmd, data }) => {
+  switch (cmd) {
+    case 'setCode':
+      mainWindow.webContents.send('oc-set-code', data);
+      break;
+    case 'getCode':
+      // 临时设置监听器获取代码
+      const respChannel = 'ide-code-response';
+      ipcMain.once(respChannel, (e, code) => {
+        event.sender.send('ide-response', { cmd: 'getCode', result: code });
+      });
+      mainWindow.webContents.send('oc-get-code', respChannel);
+      break;
+    case 'connect':
+      connectSerial(data.port, data.baud || 115200);
+      break;
+    case 'disconnect':
+      disconnectSerial();
+      break;
+    case 'sendRaw':
+      sendRawToSerial(data);
+      break;
+    case 'runCode':
+      mainWindow.webContents.send('oc-run-code');
+      break;
+    case 'getStatus':
+      event.sender.send('ide-response', {
+        cmd: 'getStatus',
+        result: { connected: isConnected, port: currentPort, baud: currentBaudRate }
+      });
+      break;
+    case 'getPorts':
+      SerialPort.list().then(ports => {
+        event.sender.send('ide-response', { cmd: 'getPorts', result: ports });
+      }).catch(() => {
+        event.sender.send('ide-response', { cmd: 'getPorts', result: [] });
+      });
+      break;
+    default:
+      console.warn('Unknown IDE command:', cmd);
+  }
+});
+
+// ============================================
+// 应用入口
+// ============================================
+app.whenReady().then(() => {
+  createWindow();
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});

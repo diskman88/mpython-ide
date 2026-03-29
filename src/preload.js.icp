@@ -1,0 +1,73 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+// 暴露安全的 API 给渲染进程 (原有功能保留)
+contextBridge.exposeInMainWorld('electronAPI', {
+  // 串口操作
+  getPorts: () => ipcRenderer.send('get-ports'),
+  onPortsList: (callback) => ipcRenderer.on('serial-ports', (event, ports) => callback(ports)),
+  onPortError: (callback) => ipcRenderer.on('serial-error', (event, err) => callback(err)),
+
+  connect: (port, baudRate) => ipcRenderer.send('connect-serial', port, baudRate || 115200),
+  disconnect: () => ipcRenderer.send('disconnect-serial'),
+  onConnected: (callback) => ipcRenderer.on('serial-connected', (event, port) => callback(port)),
+  onDisconnected: (callback) => ipcRenderer.on('serial-closed', callback),
+
+  // 发送原始数据（用于所有按键）
+  sendRaw: (data) => ipcRenderer.send('send-raw-serial', data),
+
+  // 设备数据（实时流式）
+  onData: (callback) => ipcRenderer.on('serial-data', (event, data) => callback(data)),
+
+  // 文件操作
+  openFile: () => ipcRenderer.send('menu-action', 'open-file'),
+  saveFile: () => ipcRenderer.send('menu-action', 'save-file'),
+  onFileContent: (callback) => ipcRenderer.on('file-content', (event, data) => callback(data)),
+  onFileError: (callback) => ipcRenderer.on('file-error', (event, err) => callback(err)),
+
+  // 其他
+  onRefreshPorts: (callback) => ipcRenderer.on('refresh-ports', () => callback()),
+  onMenuAction: (callback) => ipcRenderer.on('menu-action', (event, action) => callback(action))
+});
+
+// ============================================
+// OpenClaw API - 给 AI 暴露的控制接口
+// ============================================
+contextBridge.exposeInMainWorld('openClawAPI', {
+  // 编辑器控制
+  setCode: (code) => ipcRenderer.send('oc-set-code', code),
+  getCode: () => ipcRenderer.invoke('oc-get-code'),
+  
+  // 串口控制
+  connect: (port, baudRate) => ipcRenderer.send('oc-connect', port, baudRate || 115200),
+  disconnect: () => ipcRenderer.send('oc-disconnect'),
+  sendRaw: (data) => ipcRenderer.send('oc-send-raw', data),
+  
+  // REPL 回调 (设置后，REPL 数据会通过此回调返回)
+  onData: (callback) => ipcRenderer.on('oc-data', (event, data) => callback(data)),
+  
+  // 连接状态回调
+  onConnect: (callback) => ipcRenderer.on('oc-connected', (event, port) => callback(port)),
+  onDisconnect: (callback) => ipcRenderer.on('oc-disconnected', callback),
+  
+  // 获取编辑器内容并执行
+  runCode: () => ipcRenderer.send('oc-run-code'),
+  
+  // 获取可用串口列表
+  getPorts: (callback) => {
+    ipcRenderer.send('get-ports');
+    ipcRenderer.once('serial-ports', (event, ports) => callback(ports));
+  },
+
+  // 渲染进程消息监听 (oc-* 事件从 main 来)
+  onOCMessage: (channel, callback) => {
+    const validChannels = ['oc-set-code', 'oc-get-code', 'oc-run-code'];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.on(channel, (event, ...args) => callback(...args));
+    }
+  },
+
+  // 发送响应给 main (用于 getCode 等需要返回值的操作)
+  sendOCResponse: (channel, data) => {
+    ipcRenderer.send(channel, data);
+  }
+});

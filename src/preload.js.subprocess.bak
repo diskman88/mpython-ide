@@ -1,0 +1,175 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+// ============================================
+// electronAPI - 原有功能 (保持兼容)
+// ============================================
+contextBridge.exposeInMainWorld('electronAPI', {
+  // 串口操作
+  getPorts: () => ipcRenderer.send('get-ports'),
+  onPortsList: (callback) => ipcRenderer.on('serial-ports', (event, ports) => callback(ports)),
+  onPortError: (callback) => ipcRenderer.on('serial-error', (event, err) => callback(err)),
+
+  connect: (port, baudRate) => ipcRenderer.send('connect-serial', port, baudRate || 115200),
+  disconnect: () => ipcRenderer.send('disconnect-serial'),
+  onConnected: (callback) => ipcRenderer.on('serial-connected', (event, port) => callback(port)),
+  onDisconnected: (callback) => ipcRenderer.on('serial-closed', callback),
+
+  // 发送原始数据
+  sendRaw: (data) => ipcRenderer.send('send-raw-serial', data),
+
+  // 设备数据
+  onData: (callback) => ipcRenderer.on('serial-data', (event, data) => callback(data)),
+
+  // 文件操作
+  openFile: () => ipcRenderer.send('menu-action', 'open-file'),
+  saveFile: () => ipcRenderer.send('menu-action', 'save-file'),
+  onFileContent: (callback) => ipcRenderer.on('file-content', (event, data) => callback(data)),
+  onFileError: (callback) => ipcRenderer.on('file-error', (event, err) => callback(err)),
+
+  // 其他
+  onRefreshPorts: (callback) => ipcRenderer.on('refresh-ports', () => callback()),
+  onMenuAction: (callback) => ipcRenderer.on('menu-action', (event, action) => callback(action)),
+
+  // Webview 消息中转 (用于 OpenClaw AI → IDE 控制)
+  onIdeCommand: (callback) => ipcRenderer.on('ide-command', (event, cmd) => callback(cmd)),
+
+  // OpenClaw 消息处理 (内部使用)
+  onOCMessage: (channel, callback) => {
+    const validChannels = ['oc-set-code', 'oc-get-code', 'oc-run-code'];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.on(channel, (event, ...args) => callback(...args));
+    }
+  },
+
+  sendOCResponse: (channel, data) => {
+    ipcRenderer.send(channel, data);
+  }
+});
+
+// ============================================
+// openClawAPI - AI 控制接口 (IPC 内存模式)
+// ============================================
+let _pendingCallbacks = {};
+let _requestId = 0;
+
+contextBridge.exposeInMainWorld('openClawAPI', {
+  // ── 简单操作 (无需等待结果) ──
+  setCode: (code) => {
+    ipcRenderer.send('oc-set-code', code);
+  },
+
+  connect: (port, baudRate) => {
+    ipcRenderer.send('oc-connect', port, baudRate || 115200);
+  },
+
+  disconnect: () => {
+    ipcRenderer.send('oc-disconnect');
+  },
+
+  sendRaw: (data) => {
+    ipcRenderer.send('oc-send-raw', data);
+  },
+
+  runCode: () => {
+    ipcRenderer.send('oc-run-code');
+  },
+
+  // ── 带回调的操作 (可用于 AI 获取信息) ──
+  getCode: (callback) => {
+    const id = ++_requestId;
+    _pendingCallbacks[id] = callback;
+    ipcRenderer.send('oc-get-code', id);
+    setTimeout(() => {
+      if (_pendingCallbacks[id]) {
+        _pendingCallbacks[id](null);
+        delete _pendingCallbacks[id];
+      }
+    }, 3000);
+  },
+
+  getStatus: (callback) => {
+    const id = ++_requestId;
+    _pendingCallbacks[id] = callback;
+    ipcRenderer.send('oc-get-status', id);
+    setTimeout(() => {
+      if (_pendingCallbacks[id]) {
+        _pendingCallbacks[id](null);
+        delete _pendingCallbacks[id];
+      }
+    }, 3000);
+  },
+
+  getPorts: (callback) => {
+    const id = ++_requestId;
+    _pendingCallbacks[id] = callback;
+    ipcRenderer.send('oc-get-ports', id);
+    setTimeout(() => {
+      if (_pendingCallbacks[id]) {
+        _pendingCallbacks[id](null);
+        delete _pendingCallbacks[id];
+      }
+    }, 3000);
+  },
+
+  // ── 事件订阅 (IDE → AI 单向推送) ──
+  onData: (callback) => {
+    ipcRenderer.on('oc-data', (event, data) => callback(data));
+  },
+
+  onStatusChange: (callback) => {
+    ipcRenderer.on('oc-status', (event, status) => callback(status));
+  },
+
+  // ── 内部: 接收响应 ──
+  _handleResponse: (id, result) => {
+    if (_pendingCallbacks[id]) {
+      _pendingCallbacks[id](result);
+      delete _pendingCallbacks[id];
+    }
+  }
+});
+
+// 监听响应并分发
+ipcRenderer.on('oc-response', (event, { id, result }) => {
+  if (window.openClawAPI && window.openClawAPI._handleResponse) {
+    window.openClawAPI._handleResponse(id, result);
+  }
+});
+
+// ============================================
+// IDE Command API - OpenClaw AI 可以调用的接口
+// 暴露给 webview 内的 OpenClaw AI 使用
+// ============================================
+contextBridge.exposeInMainWorld('ideAPI', {
+  // 执行 IDE 命令
+  exec: (cmd, data) => {
+    // cmd: 'setCode' | 'getCode' | 'connect' | 'disconnect' | 'sendRaw' | 'runCode' | 'getStatus' | 'getPorts'
+    // data: 对应的参数
+    ipcRenderer.send('ide-command', { cmd, data });
+  },
+
+  // 订阅 REPL 数据流
+  onReplData: (callback) => {
+    ipcRenderer.on('oc-data', (event, data) => callback(data));
+  },
+
+  // 订阅连接状态变化
+  onConnectionChange: (callback) => {
+    ipcRenderer.on('oc-status', (event, status) => callback(status));
+  }
+});
+
+// ============================================
+// WebSocket 模式 (可选，默认关闭)
+// ============================================
+/*
+// 在 main.js 中启用:
+const WebSocket = require('ws');
+const wss = new WebSocket.Server({ port: 34568 });
+wss.on('connection', (ws) => {
+  ws.on('message', (message) => {
+    const { type, action, data, id } = JSON.parse(message);
+    // 处理消息并响应
+  });
+});
+*/

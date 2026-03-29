@@ -1,0 +1,643 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  font-size: 14px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 主容器 - 三栏布局 */
+.container {
+  display: flex;
+  height: 100vh;
+  gap: 4px;
+  padding: 4px;
+  background: #252526;
+  overflow: hidden;
+}
+
+/* 左侧面板 - OpenClaw */
+.left-panel {
+  flex: 1;
+  min-width: 150px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 右侧面板容器 */
+.right-panels {
+  flex: 1;
+  min-width: 200px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* 可拖动分隔条 */
+.splitter {
+  height: 6px;
+  background: #3c3c3c;
+  cursor: row-resize;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.splitter:hover {
+  background: #569cd6;
+}
+
+.splitter::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 30px;
+  height: 2px;
+  background: #808080;
+  border-radius: 1px;
+}
+
+/* 通用面板样式 */
+.panel {
+  background: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #3c3c3c;
+  min-height: 40px;
+}
+
+.panel-title {
+  font-weight: 600;
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.panel-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tab-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.tab-btn {
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  color: #808080;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  background: #3c3c3c;
+  color: #d4d4d4;
+}
+
+.tab-btn.active {
+  background: #569cd6;
+  border-color: #569cd6;
+  color: #ffffff;
+}
+
+.tab-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  height: 100%;
+}
+
+.tab-panel.hidden {
+  display: none;
+}
+
+.panel-controls.hidden {
+  display: none;
+}
+
+.panel-controls.editor-controls {
+  margin-left: auto;
+}
+
+.panel-controls.diagram-controls {
+  margin-left: auto;
+}
+
+.panel-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+
+/* 右上 - 硬件连接图 */
+.top-panel {
+  flex: 1;
+  min-height: 100px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#diagram-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1e1e1e;
+}
+
+.diagram-placeholder {
+  text-align: center;
+  color: #808080;
+  padding: 40px;
+}
+
+.diagram-placeholder .hint {
+  font-size: 12px;
+  margin-top: 8px;
+  opacity: 0.7;
+}
+
+.diagram-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.sensor-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* 右下 - REPL 终端 */
+.bottom-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.bottom-panel .panel-content {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  height: 100%;
+}
+
+.terminal {
+  flex: 1;
+  background: #1e1e1e;
+  overflow: hidden;
+  box-sizing: border-box;
+  min-height: 0;
+}
+
+/* xterm.js 样式覆盖 */
+.xterm {
+  height: 100% !important;
+  padding: 4px;
+}
+
+.xterm .xterm-screen {
+  height: 100% !important;
+}
+
+.xterm-viewport {
+  background-color: #1e1e1e !important;
+}
+
+/* 行样式 */
+.line {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  padding: 2px 12px;
+}
+
+.line.command {
+  color: #569cd6;
+}
+
+.line.response {
+  color: #d4d4d4;
+}
+
+.line.error {
+  color: #f44747;
+}
+
+.line.system {
+  color: #608b4e;
+}
+
+.line.command {
+  color: #d4d4d4;
+  background: #2a2a2a;
+}
+
+.line.response {
+  color: #6a9955;
+  background: #1e1e1e;
+}
+
+.line.error {
+  color: #f14c4c;
+  background: #1e1e1e;
+}
+
+.line.system {
+  color: #808080;
+  background: #1e1e1e;
+  font-style: italic;
+}
+
+/* 语法高亮基础样式 */
+.syntax-keyword {
+  color: #569cd6;
+}
+
+.syntax-string {
+  color: #ce9178;
+}
+
+.syntax-comment {
+  color: #6a9955;
+}
+
+.syntax-number {
+  color: #b5cea8;
+}
+
+.syntax-function {
+  color: #dcdcaa;
+}
+
+.syntax-class {
+  color: #4ec9b0;
+}
+
+.terminal .prompt {
+  color: #569cd6;
+}
+
+.terminal .command {
+  color: #d4d4d4;
+}
+
+.terminal .response {
+  color: #6a9955;
+}
+
+.terminal .error {
+  color: #f14c4c;
+}
+
+.terminal .system {
+  color: #808080;
+}
+
+.terminal .match {
+  color: #569cd6;
+}
+
+.input-line {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.input-line .prompt {
+  color: #569cd6;
+  font-weight: bold;
+}
+
+.input-line .current-input {
+  color: #d4d4d4;
+}
+
+.line {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.line.command {
+  color: #d4d4d4;
+}
+
+.line.response {
+  color: #6a9955;
+}
+
+.line.error {
+  color: #f14c4c;
+}
+
+.line.system {
+  color: #808080;
+}
+
+/* OpenClaw iframe */
+#openclaw-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+#openclaw-frame,
+webview {
+  flex: 1;
+  width: 100%;
+  background: #ffffff;
+  border: none;
+}
+
+/* 代码编辑器容器 - Monaco Editor */
+#code-editor-container {
+  flex: 1;
+  display: flex;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+  height: 100%;
+}
+
+/* 行号 */
+.line-numbers {
+  width: 40px;
+  padding: 12px 4px;
+  background: #252526;
+  border-right: 1px solid #3c3c3c;
+  color: #808080;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: right;
+  user-select: none;
+  overflow: hidden;
+}
+
+/* 代码编辑器 */
+.code-editor {
+  flex: 1;
+  height: 100%;
+  padding: 12px;
+  background: #1e1e1e;
+  border: none;
+  color: #d4d4d4;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  resize: none;
+  outline: none;
+  tab-size: 4;
+  overflow: auto;
+  box-sizing: border-box;
+  min-height: 0;
+}
+
+.code-editor:focus {
+  outline: none;
+}
+
+.file-path {
+  padding: 4px 12px;
+  background: #2d2d2d;
+  border-top: 1px solid #3c3c3c;
+  font-size: 12px;
+  color: #808080;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 按钮样式 */
+.btn-small {
+  padding: 4px 12px;
+  font-size: 12px;
+  background: #3c3c3c;
+  color: #d4d4d4;
+  border: 1px solid #4c4c4c;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-small:hover {
+  background: #4c4c4c;
+}
+
+.btn-small:active {
+  background: #3c3c3c;
+}
+
+.btn-small:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-small.btn-primary {
+  background: #0e639c;
+  border-color: #0e639c;
+  color: #ffffff;
+}
+
+.btn-small.btn-primary:hover {
+  background: #1177bb;
+}
+
+.btn-small.btn-danger {
+  background: #c50f1f;
+  border-color: #c50f1f;
+  color: #ffffff;
+}
+
+/* 选择框样式 */
+.select-small {
+  padding: 4px 8px;
+  font-size: 12px;
+  background: #3c3c3c;
+  color: #d4d4d4;
+  border: 1px solid #4c4c4c;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.select-small:focus {
+  outline: none;
+  border-color: #569cd6;
+}
+
+/* 模态框 */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 6px;
+  width: 400px;
+  max-width: 90%;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.modal-header h3 {
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #808080;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.close-btn:hover {
+  color: #d4d4d4;
+}
+
+.modal-body {
+  padding: 16px;
+}
+
+.modal-body label {
+  display: block;
+  margin-bottom: 8px;
+  color: #d4d4d4;
+}
+
+.input-full {
+  width: 100%;
+  padding: 8px 12px;
+  margin-top: 4px;
+  background: #3c3c3c;
+  border: 1px solid #4c4c4c;
+  border-radius: 3px;
+  color: #d4d4d4;
+  font-size: 13px;
+}
+
+.input-full:focus {
+  outline: none;
+  border-color: #569cd6;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid #3c3c3c;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4f4f4f;
+}
+
+/* 连接状态指示 */
+.status-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.status-indicator.connected {
+  background: #4ec9b0;
+}
+
+.status-indicator.disconnected {
+  background: #808080;
+}
+
+/* 传感器数值显示 */
+.sensor-value {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #2d4f2d;
+  border-radius: 3px;
+  color: #4ec9b0;
+  font-family: monospace;
+  margin-left: 8px;
+}
