@@ -16,8 +16,8 @@
     <!-- Left: OpenClaw Session -->
     <div class="panel left-panel">
       <div class="panel-header">
-        <span class="panel-title">🤖 OpenClaw AI</span>
-        <button id="openclow-url-btn" class="btn-small">Settings</button>
+        <span class="panel-title">🤖 OpenClaw AI 助手</span>
+        <button id="openclow-url-btn" class="btn-small">设置</button>
       </div>
       <div class="panel-content" id="openclaw-container">
         <webview id="openclaw-frame" src="http://localhost:18789"></webview>
@@ -30,21 +30,21 @@
       <div class="panel top-panel">
         <div class="panel-header">
           <div class="tab-buttons">
-            <button class="tab-btn active" data-tab="editor">📝 Code</button>
-            <button class="tab-btn" data-tab="diagram">📋 Diagram</button>
+            <button class="tab-btn active" data-tab="editor">📝 代码</button>
+            <button class="tab-btn" data-tab="diagram">📋 硬件图</button>
           </div>
           <div class="panel-controls editor-controls">
-            <button id="open-file-btn" class="btn-small">Open</button>
-            <button id="save-file-btn" class="btn-small">Save</button>
-            <button id="upload-file-btn" class="btn-small btn-primary">Upload</button>
-            <button id="run-demo-btn" class="btn-small btn-primary">Run</button>
+            <button id="open-file-btn" class="btn-small">打开</button>
+            <button id="save-file-btn" class="btn-small">保存</button>
+            <button id="upload-file-btn" class="btn-small btn-primary">上传</button>
+            <button id="run-demo-btn" class="btn-small btn-primary">运行</button>
           </div>
           <div class="panel-controls diagram-controls hidden">
             <select id="board-select" class="select-small">
               <option value="mpython-v3">MPython V3</option>
               <option value="ledo-2.0">Ledo 2.0</option>
             </select>
-            <button id="load-diagram-btn" class="btn-small">Load</button>
+            <button id="load-diagram-btn" class="btn-small">加载</button>
           </div>
         </div>
         <div class="panel-content">
@@ -54,10 +54,10 @@
           <div id="diagram-panel" class="tab-panel hidden">
             <div id="diagram-container">
               <div class="diagram-placeholder">
-                <p>📷 Click "Load" to select diagram</p>
-                <p class="hint">or drag image here</p>
+                <p>📷 点击"加载"选择硬件图</p>
+                <p class="hint">或拖放图片到此处</p>
               </div>
-              <img id="diagram-image" class="diagram-image hidden" alt="Hardware Diagram">
+              <img id="diagram-image" class="diagram-image hidden" alt="硬件图">
               <canvas id="sensor-overlay" class="sensor-overlay hidden"></canvas>
             </div>
           </div>
@@ -69,17 +69,17 @@
       <!-- Bottom: REPL Terminal -->
       <div class="panel bottom-panel">
         <div class="panel-header">
-          <span class="panel-title">🖥️ REPL Terminal</span>
+          <span class="panel-title">🖥️ REPL 终端</span>
           <div class="panel-controls">
             <select id="port-select" class="select-small">
-              <option value="">-- Port --</option>
+              <option value="">-- 端口 --</option>
             </select>
             <select id="baud-select" class="select-small">
               <option value="115200">115200</option>
               <option value="57600">57600</option>
               <option value="9600">9600</option>
             </select>
-            <button id="connect-btn" class="btn-small btn-primary">Connect</button>
+            <button id="connect-btn" class="btn-small btn-primary">连接</button>
           </div>
         </div>
         <div id="terminal-container" class="panel-content"></div>
@@ -87,11 +87,11 @@
     </div>
   </div>
 
-  <!-- Settings Modal -->
+  <!-- 设置模态框 -->
   <div id="settings-modal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>OpenClaw Settings</h3>
+        <h3>OpenClaw 设置</h3>
         <button class="close-btn">&times;</button>
       </div>
       <div class="modal-body">
@@ -101,8 +101,8 @@
         </label>
       </div>
       <div class="modal-footer">
-        <button id="save-settings-btn" class="btn-small btn-primary">Save</button>
-        <button id="cancel-settings-btn" class="btn-small">Cancel</button>
+        <button id="save-settings-btn" class="btn-small btn-primary">保存</button>
+        <button id="cancel-settings-btn" class="btn-small">取消</button>
       </div>
     </div>
   </div>
