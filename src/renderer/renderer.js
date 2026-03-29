@@ -155,6 +155,13 @@ while True:
 
   function setupEventListeners() {
     connectBtn.addEventListener('click', toggleConnection);
+    
+    // 清除终端按钮
+    document.getElementById('clear-terminal-btn').addEventListener('click', () => {
+      if (term) {
+        term.clear();
+      }
+    });
 
     // 点击串口选择时自动刷新列表
     portSelect.addEventListener('mousedown', () => {
